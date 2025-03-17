@@ -185,85 +185,87 @@ def main():
         st.markdown("- CSV files (.csv)")
         st.markdown("- Text files (.txt)")
     
-    # Process button
-    if st.button("Convert Files 🚀") and uploaded_files:
-        # Create a placeholder for the status
-        status_text = st.empty()
-        status_text.text("Starting conversion process...")
-        
-        # Create a progress bar
-        progress_bar = st.progress(0)
-        
-        # Start time
-        start_time = time.time()
-        
-        # Combined text from all files
-        all_text = ""
-        
-        # Process each uploaded file
-        try:
-            for i, uploaded_file in enumerate(uploaded_files):
-                file_name = uploaded_file.name
-                file_extension = os.path.splitext(file_name)[1].lower()
-                
-                # Update progress
-                progress_bar.progress((i + 1) / len(uploaded_files))
-                status_text.text(f"Processing {file_name}...")
-                
-                # Read file content
-                file_content = uploaded_file.read()
-                
-                # Add file header
-                all_text += f"\n\n==== BEGIN FILE: {file_name} ====\n\n"
-                
-                # Extract text based on file extension
-                if file_extension == '.docx':
-                    text_content = extract_text_from_docx(file_content)
-                elif file_extension == '.xlsx':
-                    text_content = extract_text_from_xlsx(file_content)
-                elif file_extension == '.pptx':
-                    text_content = extract_text_from_pptx(file_content)
-                elif file_extension == '.csv':
-                    text_content = extract_text_from_csv(file_content)
-                elif file_extension == '.txt':
-                    text_content = extract_text_from_txt(file_content)
-                else:
-                    text_content = f"[Unsupported file type: {file_extension}]"
-                
-                all_text += text_content
-                
-                # Add file footer
-                all_text += f"\n\n==== END FILE: {file_name} ====\n\n"
-            
-            # End time
-            end_time = time.time()
-            
-            # Success message
-            status_text.empty()
-            st.success(f"✅ Conversion complete! Processed {len(uploaded_files)} files in {end_time - start_time:.1f} seconds.")
-            
-            # Output file details
-            text_size_kb = len(all_text) / 1024
-            st.info(f"📊 Text size: {text_size_kb:.2f} KB")
-            
-            # Add a download button
-            st.download_button(
-                label="Download Text File",
-                data=all_text,
-                file_name="all_content.txt",
-                mime="text/plain"
-            )
-            
-            # Preview section
-            with st.expander("Preview content"):
-                preview_length = min(5000, len(all_text))
-                st.text_area("Content preview (first 5000 characters)", all_text[:preview_length], height=300)
-        
-        except Exception as e:
-            st.error(f"An error occurred: {str(e)}")
+    # Process button - Use a single button with a condition check
+    convert_button = st.button("Convert Files 🚀", key="convert_button")
     
-    elif st.button("Convert Files 🚀") and not uploaded_files:
-        st.warning("Please upload files first!")
+    if convert_button:
+        if uploaded_files:
+            # Create a placeholder for the status
+            status_text = st.empty()
+            status_text.text("Starting conversion process...")
+            
+            # Create a progress bar
+            progress_bar = st.progress(0)
+            
+            # Start time
+            start_time = time.time()
+            
+            # Combined text from all files
+            all_text = ""
+            
+            # Process each uploaded file
+            try:
+                for i, uploaded_file in enumerate(uploaded_files):
+                    file_name = uploaded_file.name
+                    file_extension = os.path.splitext(file_name)[1].lower()
+                    
+                    # Update progress
+                    progress_bar.progress((i + 1) / len(uploaded_files))
+                    status_text.text(f"Processing {file_name}...")
+                    
+                    # Read file content
+                    file_content = uploaded_file.read()
+                    
+                    # Add file header
+                    all_text += f"\n\n==== BEGIN FILE: {file_name} ====\n\n"
+                    
+                    # Extract text based on file extension
+                    if file_extension == '.docx':
+                        text_content = extract_text_from_docx(file_content)
+                    elif file_extension == '.xlsx':
+                        text_content = extract_text_from_xlsx(file_content)
+                    elif file_extension == '.pptx':
+                        text_content = extract_text_from_pptx(file_content)
+                    elif file_extension == '.csv':
+                        text_content = extract_text_from_csv(file_content)
+                    elif file_extension == '.txt':
+                        text_content = extract_text_from_txt(file_content)
+                    else:
+                        text_content = f"[Unsupported file type: {file_extension}]"
+                    
+                    all_text += text_content
+                    
+                    # Add file footer
+                    all_text += f"\n\n==== END FILE: {file_name} ====\n\n"
+                
+                # End time
+                end_time = time.time()
+                
+                # Success message
+                status_text.empty()
+                st.success(f"✅ Conversion complete! Processed {len(uploaded_files)} files in {end_time - start_time:.1f} seconds.")
+                
+                # Output file details
+                text_size_kb = len(all_text) / 1024
+                st.info(f"📊 Text size: {text_size_kb:.2f} KB")
+                
+                # Add a download button
+                st.download_button(
+                    label="Download Text File",
+                    data=all_text,
+                    file_name="all_content.txt",
+                    mime="text/plain"
+                )
+                
+                # Preview section
+                with st.expander("Preview content"):
+                    preview_length = min(5000, len(all_text))
+                    st.text_area("Content preview (first 5000 characters)", all_text[:preview_length], height=300)
+            
+            except Exception as e:
+                st.error(f"An error occurred: {str(e)}")
+        else:
+            st.warning("Please upload files first!")
     
     # Footer
     st.markdown("""
