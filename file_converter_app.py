@@ -1,26 +1,28 @@
 import os
-import sys
 import csv
 import zipfile
 import xml.etree.ElementTree as ET
 import re
 import streamlit as st
 import time
+import io
 
-def extract_text_from_docx(filepath):
-    """Extract text from a .docx file"""
+def extract_text_from_docx(file_content):
+    """Extract text from a .docx file content"""
     text = ""
     try:
-        # .docx files are zip archives
-        with zipfile.ZipFile(filepath) as document:
+        # Create a BytesIO object from the file content
+        bytes_io = io.BytesIO(file_content)
+        
+        # Open as a zip file
+        with zipfile.ZipFile(bytes_io) as document:
             # The document content is in word/document.xml
             with document.open('word/document.xml') as content:
                 # Parse the XML
                 tree = ET.parse(content)
                 root = tree.getroot()
                 
-                # Extract all text elements (this is a simplified approach)
-                # The XML namespace in .docx files can be complex
+                # Extract all text elements
                 namespaces = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
                 for paragraph in root.findall('.//w:p', namespaces):
                     for text_element in paragraph.findall('.//w:t', namespaces):
@@ -28,19 +30,19 @@ def extract_text_from_docx(filepath):
                             text += text_element.text + " "
                     text += "\n"
     except Exception as e:
-        text = f"[Error extracting text from {os.path.basename(filepath)}: {str(e)}]"
+        text = f"[Error extracting text: {str(e)}]"
     
     return text
 
-def extract_text_from_xlsx(filepath):
-    """Extract text from a .xlsx file (simplified, just gets shared strings)"""
+def extract_text_from_xlsx(file_content):
+    """Extract text from a .xlsx file content"""
     text = ""
     try:
-        # .xlsx files are zip archives
-        with zipfile.ZipFile(filepath) as document:
-            # Try to extract data from sheets
-            sheet_files = [f for f in document.namelist() if f.startswith('xl/worksheets/sheet')]
-            
+        # Create a BytesIO object from the file content
+        bytes_io = io.BytesIO(file_content)
+        
+        # Open as a zip file
+        with zipfile.ZipFile(bytes_io) as document:
             # Simple approach: just extract the shared strings
             if 'xl/sharedStrings.xml' in document.namelist():
                 with document.open('xl/sharedStrings.xml') as content:
@@ -52,120 +54,77 @@ def extract_text_from_xlsx(filepath):
                         if string_item.text:
                             text += string_item.text + "\n"
     except Exception as e:
-        text = f"[Error extracting text from {os.path.basename(filepath)}: {str(e)}]"
+        text = f"[Error extracting text: {str(e)}]"
     
     return text
 
-def extract_text_from_pptx(filepath):
-    """Extract text from a .pptx file"""
+def extract_text_from_pptx(file_content):
+    """Extract text from a .pptx file content"""
     text = ""
     try:
-        # .pptx files are zip archives
-        with zipfile.ZipFile(filepath) as presentation:
+        # Create a BytesIO object from the file content
+        bytes_io = io.BytesIO(file_content)
+        
+        # Open as a zip file
+        with zipfile.ZipFile(bytes_io) as presentation:
             # Get a list of all slides
             slides = [f for f in presentation.namelist() if f.startswith('ppt/slides/slide')]
             slides.sort()
             
             # Process each slide
-            for slide in slides:
-                text += f"--- Slide {slides.index(slide) + 1} ---\n"
+            for i, slide in enumerate(slides):
+                text += f"--- Slide {i + 1} ---\n"
                 
                 with presentation.open(slide) as content:
                     tree = ET.parse(content)
                     root = tree.getroot()
                     
-                    # Extract text elements (simplified)
+                    # Extract text elements
                     for text_element in root.findall('.//{*}t'):
                         if text_element.text:
                             text += text_element.text + "\n"
                 
                 text += "\n"
     except Exception as e:
-        text = f"[Error extracting text from {os.path.basename(filepath)}: {str(e)}]"
+        text = f"[Error extracting text: {str(e)}]"
     
     return text
 
-def extract_text_from_csv(filepath):
-    """Extract text from a .csv file"""
+def extract_text_from_csv(file_content):
+    """Extract text from a .csv file content"""
     text = ""
     try:
-        with open(filepath, 'r', newline='', encoding='utf-8') as csvfile:
-            reader = csv.reader(csvfile)
-            for row in reader:
-                text += " | ".join(row) + "\n"
-    except Exception as e:
-        try:
-            # Try again with Latin-1 encoding if UTF-8 fails
-            with open(filepath, 'r', newline='', encoding='latin-1') as csvfile:
-                reader = csv.reader(csvfile)
-                for row in reader:
-                    text += " | ".join(row) + "\n"
-        except Exception as e2:
-            text = f"[Error extracting text from {os.path.basename(filepath)}: {str(e2)}]"
-    
-    return text
-
-def extract_text_from_txt(filepath):
-    """Extract text from plain text file"""
-    try:
-        with open(filepath, 'r', encoding='utf-8') as file:
-            return file.read()
+        # Create a StringIO object from the file content
+        content_str = file_content.decode('utf-8')
+        
+        # Use csv reader to parse the content
+        reader = csv.reader(content_str.splitlines())
+        for row in reader:
+            text += " | ".join(row) + "\n"
     except UnicodeDecodeError:
         try:
             # Try again with Latin-1 encoding
-            with open(filepath, 'r', encoding='latin-1') as file:
-                return file.read()
+            content_str = file_content.decode('latin-1')
+            reader = csv.reader(content_str.splitlines())
+            for row in reader:
+                text += " | ".join(row) + "\n"
         except Exception as e:
-            return f"[Error extracting text from {os.path.basename(filepath)}: {str(e)}]"
+            text = f"[Error extracting text: {str(e)}]"
+    except Exception as e:
+        text = f"[Error extracting text: {str(e)}]"
+    
+    return text
 
-def process_files(directory_path, output_file, progress_callback=None):
-    """Process all files in the given directory and extract text"""
-    
-    # Define which file extensions to process
-    supported_extensions = {
-        '.docx': extract_text_from_docx,
-        '.xlsx': extract_text_from_xlsx,
-        '.pptx': extract_text_from_pptx,
-        '.csv': extract_text_from_csv,
-        '.txt': extract_text_from_txt,
-    }
-    
-    # Find all files
-    all_files = []
-    
-    for root, dirs, files in os.walk(directory_path):
-        for file in files:
-            file_path = os.path.join(root, file)
-            file_ext = os.path.splitext(file)[1].lower()
-            
-            if file_ext in supported_extensions:
-                all_files.append((file_path, file_ext))
-    
-    # Process each file
-    with open(output_file, 'w', encoding='utf-8') as out_file:
-        for i, (file_path, file_ext) in enumerate(all_files):
-            try:
-                file_name = os.path.basename(file_path)
-                
-                # Update progress
-                if progress_callback:
-                    progress_callback((i + 1) / len(all_files))
-                
-                # Write file header
-                out_file.write(f"\n\n==== BEGIN FILE: {file_name} ====\n\n")
-                
-                # Extract text based on file type
-                extract_function = supported_extensions[file_ext]
-                text_content = extract_function(file_path)
-                out_file.write(text_content)
-                
-                # Write file footer
-                out_file.write(f"\n\n==== END FILE: {file_name} ====\n\n")
-                
-            except Exception as e:
-                st.error(f"Error processing {file_path}: {str(e)}")
-    
-    return len(all_files)
+def extract_text_from_txt(file_content):
+    """Extract text from plain text content"""
+    try:
+        return file_content.decode('utf-8')
+    except UnicodeDecodeError:
+        try:
+            # Try again with Latin-1 encoding
+            return file_content.decode('latin-1')
+        except Exception as e:
+            return f"[Error extracting text: {str(e)}]"
 
 def main():
     st.set_page_config(
@@ -208,24 +167,15 @@ def main():
     st.title("📄 File to Text Converter")
     st.subheader("Convert your documents to a single text file for AI training")
     
-    # File selection section
-    st.markdown("### 1. Select your files folder")
+    # File upload section
+    st.markdown("### 1. Upload your files")
     
-    directory_path = st.text_input("Folder containing your files:", 
-                                  placeholder="e.g., /Users/username/Documents/MyFiles")
-    
-    # Check if directory exists
-    if directory_path and not os.path.isdir(directory_path):
-        st.warning("⚠️ This directory doesn't exist. Please enter a valid folder path.")
-    
-    # Output file section
-    st.markdown("### 2. Choose output file location")
-    output_file = st.text_input("Output file path:", 
-                              value=os.path.join(os.path.expanduser("~"), "Desktop", "all_content.txt") if directory_path else "",
-                              placeholder="e.g., /Users/username/Desktop/all_content.txt")
+    uploaded_files = st.file_uploader("Select files to convert", 
+                                      accept_multiple_files=True,
+                                      type=["docx", "xlsx", "pptx", "csv", "txt"])
     
     # File types section
-    st.markdown("### 3. Supported File Types")
+    st.markdown("### 2. Supported File Types")
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("- Microsoft Word (.docx)")
@@ -236,18 +186,10 @@ def main():
         st.markdown("- Text files (.txt)")
     
     # Process button
-    if st.button("Convert Files 🚀"):
-        if not directory_path or not os.path.isdir(directory_path):
-            st.error("Please select a valid folder first!")
-            return
-        
-        if not output_file:
-            st.error("Please specify an output file!")
-            return
-        
+    if st.button("Convert Files 🚀") and uploaded_files:
         # Create a placeholder for the status
         status_text = st.empty()
-        status_text.text("Scanning for files...")
+        status_text.text("Starting conversion process...")
         
         # Create a progress bar
         progress_bar = st.progress(0)
@@ -255,34 +197,73 @@ def main():
         # Start time
         start_time = time.time()
         
-        # Process the files
+        # Combined text from all files
+        all_text = ""
+        
+        # Process each uploaded file
         try:
-            file_count = process_files(directory_path, output_file, progress_bar.progress)
+            for i, uploaded_file in enumerate(uploaded_files):
+                file_name = uploaded_file.name
+                file_extension = os.path.splitext(file_name)[1].lower()
+                
+                # Update progress
+                progress_bar.progress((i + 1) / len(uploaded_files))
+                status_text.text(f"Processing {file_name}...")
+                
+                # Read file content
+                file_content = uploaded_file.read()
+                
+                # Add file header
+                all_text += f"\n\n==== BEGIN FILE: {file_name} ====\n\n"
+                
+                # Extract text based on file extension
+                if file_extension == '.docx':
+                    text_content = extract_text_from_docx(file_content)
+                elif file_extension == '.xlsx':
+                    text_content = extract_text_from_xlsx(file_content)
+                elif file_extension == '.pptx':
+                    text_content = extract_text_from_pptx(file_content)
+                elif file_extension == '.csv':
+                    text_content = extract_text_from_csv(file_content)
+                elif file_extension == '.txt':
+                    text_content = extract_text_from_txt(file_content)
+                else:
+                    text_content = f"[Unsupported file type: {file_extension}]"
+                
+                all_text += text_content
+                
+                # Add file footer
+                all_text += f"\n\n==== END FILE: {file_name} ====\n\n"
             
             # End time
             end_time = time.time()
             
-            # Calculate file size
-            file_size_mb = os.path.getsize(output_file) / (1024 * 1024)
-            
             # Success message
-            st.success(f"✅ Conversion complete! Processed {file_count} files in {end_time - start_time:.1f} seconds.")
+            status_text.empty()
+            st.success(f"✅ Conversion complete! Processed {len(uploaded_files)} files in {end_time - start_time:.1f} seconds.")
             
             # Output file details
-            st.info(f"📊 Output file: {output_file}")
-            st.info(f"📊 File size: {file_size_mb:.2f} MB")
+            text_size_kb = len(all_text) / 1024
+            st.info(f"📊 Text size: {text_size_kb:.2f} KB")
             
             # Add a download button
-            with open(output_file, "rb") as file:
-                st.download_button(
-                    label="Download Text File",
-                    data=file,
-                    file_name=os.path.basename(output_file),
-                    mime="text/plain"
-                )
+            st.download_button(
+                label="Download Text File",
+                data=all_text,
+                file_name="all_content.txt",
+                mime="text/plain"
+            )
+            
+            # Preview section
+            with st.expander("Preview content"):
+                preview_length = min(5000, len(all_text))
+                st.text_area("Content preview (first 5000 characters)", all_text[:preview_length], height=300)
         
         except Exception as e:
             st.error(f"An error occurred: {str(e)}")
+    
+    elif st.button("Convert Files 🚀") and not uploaded_files:
+        st.warning("Please upload files first!")
     
     # Footer
     st.markdown("""
