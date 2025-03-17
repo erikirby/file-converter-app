@@ -6,6 +6,7 @@ import re
 import streamlit as st
 import time
 import io
+import PyPDF2
 
 def extract_text_from_docx(file_content):
     """Extract text from a .docx file content"""
@@ -126,6 +127,33 @@ def extract_text_from_txt(file_content):
         except Exception as e:
             return f"[Error extracting text: {str(e)}]"
 
+def extract_text_from_pdf(file_content):
+    """Extract text from a PDF file content"""
+    text = ""
+    try:
+        # Create a BytesIO object from the file content
+        bytes_io = io.BytesIO(file_content)
+        
+        # Use PyPDF2 to read the PDF
+        pdf_reader = PyPDF2.PdfReader(bytes_io)
+        
+        # Extract text from each page
+        for page_num in range(len(pdf_reader.pages)):
+            page = pdf_reader.pages[page_num]
+            text += f"--- Page {page_num + 1} ---\n"
+            try:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n\n"
+                else:
+                    text += "[Empty or unreadable page]\n\n"
+            except Exception as e:
+                text += f"[Error extracting text from page {page_num + 1}: {str(e)}]\n\n"
+    except Exception as e:
+        text = f"[Error processing PDF: {str(e)}]"
+    
+    return text
+
 def main():
     st.set_page_config(
         page_title="File to Text Converter",
@@ -171,8 +199,8 @@ def main():
     st.markdown("### 1. Upload your files")
     
     uploaded_files = st.file_uploader("Select files to convert", 
-                                      accept_multiple_files=True,
-                                      type=["docx", "xlsx", "pptx", "csv", "txt"])
+                                     accept_multiple_files=True,
+                                     type=["docx", "xlsx", "pptx", "csv", "txt", "pdf"])
     
     # File types section
     st.markdown("### 2. Supported File Types")
@@ -184,6 +212,7 @@ def main():
     with col2:
         st.markdown("- CSV files (.csv)")
         st.markdown("- Text files (.txt)")
+        st.markdown("- PDF files (.pdf)")
     
     # Process button - Use a single button with a condition check
     convert_button = st.button("Convert Files 🚀", key="convert_button")
@@ -230,6 +259,8 @@ def main():
                         text_content = extract_text_from_csv(file_content)
                     elif file_extension == '.txt':
                         text_content = extract_text_from_txt(file_content)
+                    elif file_extension == '.pdf':
+                        text_content = extract_text_from_pdf(file_content)
                     else:
                         text_content = f"[Unsupported file type: {file_extension}]"
                     
