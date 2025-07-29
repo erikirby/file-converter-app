@@ -1,309 +1,64 @@
-import os
-import csv
-import zipfile
-import xml.etree.ElementTree as ET
-import re
-import streamlit as st
-import time
-import io
-import PyPDF2
+{\rtf1\ansi\ansicpg1252\cocoartf2822
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
 
-def extract_text_from_docx(file_content):
-    """Extract text from a .docx file content"""
-    text = ""
-    try:
-        # Create a BytesIO object from the file content
-        bytes_io = io.BytesIO(file_content)
-        
-        # Open as a zip file
-        with zipfile.ZipFile(bytes_io) as document:
-            # The document content is in word/document.xml
-            with document.open('word/document.xml') as content:
-                # Parse the XML
-                tree = ET.parse(content)
-                root = tree.getroot()
-                
-                # Extract all text elements
-                namespaces = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
-                for paragraph in root.findall('.//w:p', namespaces):
-                    for text_element in paragraph.findall('.//w:t', namespaces):
-                        if text_element.text:
-                            text += text_element.text + " "
-                    text += "\n"
-    except Exception as e:
-        text = f"[Error extracting text: {str(e)}]"
-    
-    return text
-
-def extract_text_from_xlsx(file_content):
-    """Extract text from a .xlsx file content"""
-    text = ""
-    try:
-        # Create a BytesIO object from the file content
-        bytes_io = io.BytesIO(file_content)
-        
-        # Open as a zip file
-        with zipfile.ZipFile(bytes_io) as document:
-            # Simple approach: just extract the shared strings
-            if 'xl/sharedStrings.xml' in document.namelist():
-                with document.open('xl/sharedStrings.xml') as content:
-                    tree = ET.parse(content)
-                    root = tree.getroot()
-                    
-                    # Extract all text elements
-                    for string_item in root.findall('.//{*}t'):
-                        if string_item.text:
-                            text += string_item.text + "\n"
-    except Exception as e:
-        text = f"[Error extracting text: {str(e)}]"
-    
-    return text
-
-def extract_text_from_pptx(file_content):
-    """Extract text from a .pptx file content"""
-    text = ""
-    try:
-        # Create a BytesIO object from the file content
-        bytes_io = io.BytesIO(file_content)
-        
-        # Open as a zip file
-        with zipfile.ZipFile(bytes_io) as presentation:
-            # Get a list of all slides
-            slides = [f for f in presentation.namelist() if f.startswith('ppt/slides/slide')]
-            slides.sort()
-            
-            # Process each slide
-            for i, slide in enumerate(slides):
-                text += f"--- Slide {i + 1} ---\n"
-                
-                with presentation.open(slide) as content:
-                    tree = ET.parse(content)
-                    root = tree.getroot()
-                    
-                    # Extract text elements
-                    for text_element in root.findall('.//{*}t'):
-                        if text_element.text:
-                            text += text_element.text + "\n"
-                
-                text += "\n"
-    except Exception as e:
-        text = f"[Error extracting text: {str(e)}]"
-    
-    return text
-
-def extract_text_from_csv(file_content):
-    """Extract text from a .csv file content"""
-    text = ""
-    try:
-        # Create a StringIO object from the file content
-        content_str = file_content.decode('utf-8')
-        
-        # Use csv reader to parse the content
-        reader = csv.reader(content_str.splitlines())
-        for row in reader:
-            text += " | ".join(row) + "\n"
-    except UnicodeDecodeError:
-        try:
-            # Try again with Latin-1 encoding
-            content_str = file_content.decode('latin-1')
-            reader = csv.reader(content_str.splitlines())
-            for row in reader:
-                text += " | ".join(row) + "\n"
-        except Exception as e:
-            text = f"[Error extracting text: {str(e)}]"
-    except Exception as e:
-        text = f"[Error extracting text: {str(e)}]"
-    
-    return text
-
-def extract_text_from_txt(file_content):
-    """Extract text from plain text content"""
-    try:
-        return file_content.decode('utf-8')
-    except UnicodeDecodeError:
-        try:
-            # Try again with Latin-1 encoding
-            return file_content.decode('latin-1')
-        except Exception as e:
-            return f"[Error extracting text: {str(e)}]"
-
-def extract_text_from_pdf(file_content):
-    """Extract text from a PDF file content"""
-    text = ""
-    try:
-        # Create a BytesIO object from the file content
-        bytes_io = io.BytesIO(file_content)
-        
-        # Use PyPDF2 to read the PDF
-        pdf_reader = PyPDF2.PdfReader(bytes_io)
-        
-        # Extract text from each page
-        for page_num in range(len(pdf_reader.pages)):
-            page = pdf_reader.pages[page_num]
-            text += f"--- Page {page_num + 1} ---\n"
-            try:
-                page_text = page.extract_text()
-                if page_text:
-                    text += page_text + "\n\n"
-                else:
-                    text += "[Empty or unreadable page]\n\n"
-            except Exception as e:
-                text += f"[Error extracting text from page {page_num + 1}: {str(e)}]\n\n"
-    except Exception as e:
-        text = f"[Error processing PDF: {str(e)}]"
-    
-    return text
-
-def main():
-    st.set_page_config(
-        page_title="File to Text Converter",
-        page_icon="📄",
-        layout="centered",
-        initial_sidebar_state="collapsed",
-    )
-    
-    # Custom CSS to make it prettier
-    st.markdown("""
-        <style>
-        .main {
-            background-color: #f5f7ff;
-            border-radius: 10px;
-            padding: 20px;
-        }
-        .stButton>button {
-            background-color: #4f8bf9;
-            color: white;
-            border-radius: 5px;
-            padding: 10px 15px;
-            font-weight: bold;
-        }
-        h1 {
-            color: #1f3d7a;
-        }
-        .footer {
-            margin-top: 50px;
-            text-align: center;
-            color: #888;
-            font-size: 12px;
-        }
-        .stProgress > div > div > div > div {
-            background-color: #4f8bf9;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    
-    st.title("📄 File to Text Converter")
-    st.subheader("Convert your documents to a single text file for AI training")
-    
-    # File upload section
-    st.markdown("### 1. Upload your files")
-    
-    uploaded_files = st.file_uploader("Select files to convert", 
-                                     accept_multiple_files=True,
-                                     type=["docx", "xlsx", "pptx", "csv", "txt", "pdf"])
-    
-    # File types section
-    st.markdown("### 2. Supported File Types")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("- Microsoft Word (.docx)")
-        st.markdown("- Microsoft Excel (.xlsx)")
-        st.markdown("- Microsoft PowerPoint (.pptx)")
-    with col2:
-        st.markdown("- CSV files (.csv)")
-        st.markdown("- Text files (.txt)")
-        st.markdown("- PDF files (.pdf)")
-    
-    # Process button - Use a single button with a condition check
-    convert_button = st.button("Convert Files 🚀", key="convert_button")
-    
-    if convert_button:
-        if uploaded_files:
-            # Create a placeholder for the status
-            status_text = st.empty()
-            status_text.text("Starting conversion process...")
-            
-            # Create a progress bar
-            progress_bar = st.progress(0)
-            
-            # Start time
-            start_time = time.time()
-            
-            # Combined text from all files
-            all_text = ""
-            
-            # Process each uploaded file
-            try:
-                for i, uploaded_file in enumerate(uploaded_files):
-                    file_name = uploaded_file.name
-                    file_extension = os.path.splitext(file_name)[1].lower()
-                    
-                    # Update progress
-                    progress_bar.progress((i + 1) / len(uploaded_files))
-                    status_text.text(f"Processing {file_name}...")
-                    
-                    # Read file content
-                    file_content = uploaded_file.read()
-                    
-                    # Add file header
-                    all_text += f"\n\n==== BEGIN FILE: {file_name} ====\n\n"
-                    
-                    # Extract text based on file extension
-                    if file_extension == '.docx':
-                        text_content = extract_text_from_docx(file_content)
-                    elif file_extension == '.xlsx':
-                        text_content = extract_text_from_xlsx(file_content)
-                    elif file_extension == '.pptx':
-                        text_content = extract_text_from_pptx(file_content)
-                    elif file_extension == '.csv':
-                        text_content = extract_text_from_csv(file_content)
-                    elif file_extension == '.txt':
-                        text_content = extract_text_from_txt(file_content)
-                    elif file_extension == '.pdf':
-                        text_content = extract_text_from_pdf(file_content)
-                    else:
-                        text_content = f"[Unsupported file type: {file_extension}]"
-                    
-                    all_text += text_content
-                    
-                    # Add file footer
-                    all_text += f"\n\n==== END FILE: {file_name} ====\n\n"
-                
-                # End time
-                end_time = time.time()
-                
-                # Success message
-                status_text.empty()
-                st.success(f"✅ Conversion complete! Processed {len(uploaded_files)} files in {end_time - start_time:.1f} seconds.")
-                
-                # Output file details
-                text_size_kb = len(all_text) / 1024
-                st.info(f"📊 Text size: {text_size_kb:.2f} KB")
-                
-                # Add a download button
-                st.download_button(
-                    label="Download Text File",
-                    data=all_text,
-                    file_name="all_content.txt",
-                    mime="text/plain"
-                )
-                
-                # Preview section
-                with st.expander("Preview content"):
-                    preview_length = min(5000, len(all_text))
-                    st.text_area("Content preview (first 5000 characters)", all_text[:preview_length], height=300)
-            
-            except Exception as e:
-                st.error(f"An error occurred: {str(e)}")
-        else:
-            st.warning("Please upload files first!")
-    
-    # Footer
-    st.markdown("""
-        <div class="footer">
-            File to Text Converter - Made with ❤️ using Streamlit
-        </div>
-    """, unsafe_allow_html=True)
-
-if __name__ == "__main__":
-    main()
+\f0\fs24 \cf0 import os\
+import json\
+import streamlit as st\
+from PyPDF2 import PdfReader\
+from docx import Document\
+\
+\
+def read_pdf(file):\
+    try:\
+        reader = PdfReader(file)\
+        return "\\n".join(page.extract_text() or "" for page in reader.pages)\
+    except:\
+        return "[Error reading PDF]"\
+\
+\
+def read_docx(file):\
+    try:\
+        doc = Document(file)\
+        return "\\n".join([para.text for para in doc.paragraphs])\
+    except:\
+        return "[Error reading DOCX]"\
+\
+\
+def read_txt(file):\
+    try:\
+        return file.read().decode("utf-8")\
+    except:\
+        return "[Error reading TXT]"\
+\
+\
+def convert_file(file):\
+    name = file.name\
+    suffix = name.split(".")[-1].lower()\
+    if suffix == "pdf":\
+        text = read_pdf(file)\
+    elif suffix == "docx":\
+        text = read_docx(file)\
+    elif suffix == "txt":\
+        text = read_txt(file)\
+    else:\
+        text = "[Unsupported file type]"\
+    return name, text\
+\
+\
+def main():\
+    st.title("File to Text Converter")\
+    st.caption("Convert your documents to a single file for AI training")\
+\
+    uploaded_files = st.file_uploader(\
+        "Select files to convert",\
+        type=["pdf", "docx", "txt"],\
+        accept_multiple_files=True\
+    )\
+\
+    export_format = st.radio("Choose export format", ["Plain Text (.txt)", "Structured JSONL (.jsonl)"])\
+\
+    if st.button("Convert Files }
